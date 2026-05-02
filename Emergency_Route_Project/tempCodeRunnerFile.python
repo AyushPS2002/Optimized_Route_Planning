@@ -1,0 +1,2 @@
+print("HI")
+h=int(input(print("input")))

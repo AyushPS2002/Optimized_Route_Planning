@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Emergency Routing Control Room</title>
+
+  <!-- Leaflet 1.9.3 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+
+  <!-- MiniMap -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- ✦ NEW PANEL TOGGLE (top‑left) ✦ -->
+<div id="panelToggle" class="panel-toggle">
+  <button class="toggle-btn" data-panel="panelMain" title="Toggle Main Panel">📋</button>
+  <button class="toggle-btn" data-panel="panelHistory" title="Toggle History Panel">📊</button>
+  <button class="toggle-btn" data-panel="panelLegend" title="Toggle Legend Panel">🗺️</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MAIN CONTROL PANEL — draggable
+══════════════════════════════════════════════════════════════ -->
+<div id="panelMain" class="draggable-panel">
+  <div class="panel-header">
+    <div class="drag-handle">⣿⣿</div>
+    <div style="flex:1; font-size:14px; font-weight:bold;">🚑 Emergency Routing</div>
+    <button class="panel-close" title="Close panel">✕</button>
+  </div>
+  <div class="panel-content">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <div style="color:#aaa; font-size:10px;">Control Room · Click map inside boundary → place accident → run</div>
+      <div id="statusBadge" class="s-badge">
+        <span id="statusDot" class="s-dot"></span>
+        <span id="statusLabel">STANDBY</span>
+      </div>
+    </div>
+
+    <!-- Time Control -->
+    <div id="secTimeControl" style="margin-bottom:10px; padding:8px 10px; background:#f9f9fb; border-radius:9px; border:1px solid #eee;">
+      <div class="lbl">⏱ TIME OF DAY</div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+        <input type="range" id="hourSlider" min="0" max="23" value="8" style="flex:1;">
+        <span id="hourLabel" style="font-size:15px; font-weight:bold; min-width:52px; color:#333;">08:00</span>
+        <span id="congDot" style="display:inline-block; width:9px; height:9px; border-radius:50%; background:#f6c90e; flex-shrink:0; cursor:help; box-shadow:0 0 4px currentColor; transition:background 0.3s;" title="Traffic level"></span>
+        <select id="minuteSelect" style="width:66px; padding:5px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px; background:#fafafa; cursor:pointer; font-family:Arial,sans-serif;">
+          <option value="0">:00</option>
+          <option value="15">:15</option>
+          <option value="30">:30</option>
+          <option value="45">:45</option>
+        </select>
+      </div>
+      <div style="font-size:9px; color:#bbb; margin-top:3px; text-align:right;">
+        Rush: 7–10, 16–20 (×1.8) &nbsp;|&nbsp; Night: 23–5 (×0.4)
+      </div>
+    </div>
+
+    <!-- KPI Dashboard -->
+    <div id="kpiDashboard" style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; padding:8px; background:#f8f9fb; border-radius:9px; border:1px solid #eee;">
+      <div style="text-align:center; background:#fff; border-radius:7px; padding:7px 4px; border:1px solid #f0f0f0;">
+        <div style="font-size:9px; font-weight:bold; letter-spacing:0.09em; color:#999; text-transform:uppercase;">Response Time</div>
+        <div id="kpiResponse" style="font-size:18px; font-weight:bold; color:#d62828; line-height:1.2;">--</div>
+      </div>
+      <div style="text-align:center; background:#fff; border-radius:7px; padding:7px 4px; border:1px solid #f0f0f0;">
+        <div style="font-size:9px; font-weight:bold; letter-spacing:0.09em; color:#999; text-transform:uppercase;">Time Saved</div>
+        <div id="kpiSaved" style="font-size:18px; font-weight:bold; color:#2a7a4f; line-height:1.2;">--</div>
+      </div>
+      <div style="text-align:center; background:#fff; border-radius:7px; padding:7px 4px; border:1px solid #f0f0f0;">
+        <div style="font-size:9px; font-weight:bold; letter-spacing:0.09em; color:#999; text-transform:uppercase;">Congestion</div>
+        <div id="kpiCongestion" style="font-size:18px; font-weight:bold; color:#f77f00; line-height:1.2;">--</div>
+      </div>
+      <div style="text-align:center; background:#fff; border-radius:7px; padding:7px 4px; border:1px solid #f0f0f0;">
+        <div style="font-size:9px; font-weight:bold; letter-spacing:0.09em; color:#999; text-transform:uppercase;">Distance</div>
+        <div id="kpiDistance" style="font-size:18px; font-weight:bold; color:#1a6faf; line-height:1.2;">--</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div id="secControls">
+      <div class="lbl">ACCIDENT LOCATION</div>
+      <div id="locBox" class="loc-box">
+        <span style="flex-shrink:0;">📍</span>
+        <span id="locText" style="color:#888;">Click on map inside boundary to place accident</span>
+      </div>
+      <div style="display:flex; gap:6px; margin-top:9px;">
+        <button id="runBtn" onclick="runSimulation()" disabled class="btn-run">▶ &nbsp;Run Simulation</button>
+        <button onclick="clearAll()" class="btn-reset">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="secLoading" class="hidden">
+      <div class="divider"></div>
+      <div style="text-align:center; padding:6px 0 4px;">
+        <div class="spinner"></div>
+        <div style="font-size:11px; color:#555; margin-top:9px; font-weight:600; letter-spacing:0.04em;">ROUTING INTELLIGENCE ACTIVE</div>
+        <div id="loadStep" style="font-size:10px; color:#888; margin-top:3px;">Calculating optimal paths...</div>
+      </div>
+    </div>
+
+    <!-- Status Panel -->
+    <div id="statusPanel" class="hidden">
+      <div class="divider"></div>
+      <div class="lbl">CURRENT STATUS</div>
+      <div style="background:#fff; border-radius:7px; padding:10px; border:1px solid #f0f0f0;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+          <span id="statusPhaseText" style="font-weight:bold; color:#d62828;">Dispatching</span>
+          <span id="statusElapsed" style="font-weight:bold;">0.0</span><span style="color:#888; margin-left:2px;">min</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:10px; color:#888; margin-bottom:3px;">
+          <span>Est. total: <span id="statusEstimate">--</span> min</span>
+          <span id="statusLeg">to accident</span>
+        </div>
+        <div class="progress-bar">
+          <div id="statusProgress" style="width:0%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results (ALL ORIGINAL IDs PRESERVED) -->
+    <div id="secResults" class="hidden">
+      <div class="divider"></div>
+
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f8f8f8; font-size:10px; color:#777;">
+            <th style="padding:3px 5px; text-align:left; font-weight:normal;">Metric</th>
+            <th style="padding:3px 6px; text-align:right; color:#d62828; font-weight:600;">Dynamic</th>
+            <th style="padding:3px 6px; text-align:right; font-weight:normal;">Static</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td class="td-m">Dispatch time (min)</td>
+            <td id="m_dyn_d" class="td-d">—</td>
+            <td id="m_sta_d" class="td-s">—</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td class="td-m">Dispatch distance (km)</td>
+            <td id="m_dyn_ddist" class="td-d">—</td>
+            <td id="m_sta_ddist" class="td-s">—</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td class="td-m">Dispatch congestion</td>
+            <td id="m_dyn_dcong" class="td-d">—</td>
+            <td id="m_sta_dcong" class="td-s">—</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td class="td-m">On-scene delay (min)</td>
+            <td class="td-d">4.0</td>
+            <td class="td-s">4.0</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td class="td-m">Transport time (min)</td>
+            <td id="m_dyn_t" class="td-d">—</td>
+            <td id="m_sta_t" class="td-s">—</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td class="td-m">Transport distance (km)</td>
+            <td id="m_dyn_tdist" class="td-d">—</td>
+            <td id="m_sta_tdist" class="td-s">—</td>
+          </tr>
+          <tr style="background:#f8f8f8;">
+            <td style="padding:4px 5px; font-weight:bold; font-size:12px;">TOTAL (min)</td>
+            <td id="m_dyn_total" style="padding:4px 6px; text-align:right; color:#d62828; font-weight:bold; font-size:14px;">—</td>
+            <td id="m_sta_total" style="padding:4px 6px; text-align:right; font-size:13px; color:#555;">—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Winner box -->
+      <div id="winnerBox" style="margin-top:10px; padding:9px 11px; background:#f0fff4; border-radius:7px; border-left:4px solid #d62828;">
+        <b id="winnerText" style="color:#d62828; font-size:12px;">Winner: 🚀 DYNAMIC</b><br>
+        <span style="font-size:11px; color:#555;">
+          Time saved: <b id="wSaved">— min</b> (<span id="wPct">—</span>%)<br>
+          Congestion reduced: <span id="wCong">—</span>
+        </span>
+        <div id="wNote" class="hidden" style="color:#8e44ad; font-size:10px; margin-top:3px;">
+          ⚡ Dynamic longer in km but faster in time
+        </div>
+      </div>
+
+      <!-- Insight box -->
+      <div id="insightBox" class="hidden" style="margin-top:8px; padding:9px 11px; background:linear-gradient(135deg,#fff8f8,#f8f4ff); border-radius:7px; border-left:3px solid #d62828; font-size:11px; color:#555; line-height:1.6; animation:sectionIn 0.35s ease;">
+        <b style="color:#d62828;">🧠 Insight:</b>
+        <span id="insightText"></span>
+      </div>
+
+      <!-- Detail labels -->
+      <div style="margin-top:10px; font-size:11px; color:#555; line-height:1.80;">
+        <b>Ambulance (Dyn):</b> <span id="ambLabel">—</span><br>
+        <b>Hospital (Dyn):</b> <span id="hospDynName">—</span> (<span id="hospDynDist">—</span> km by road — network)<br>
+        <b>Hospital (Sta):</b> <span id="hospStaName">—</span> (<span id="hospStaDist">—</span> km straight-line)
+      </div>
+
+      <div style="margin-top:7px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span id="zonePill" style="display:inline-block; padding:2px 10px; border-radius:12px; border:1px solid #e0e0e0; background:#f5f5f5; color:#666; font-size:10px; font-weight:bold;">Zone —</span>
+        <span id="computeNote" style="font-size:9px; color:#bbb;"></span>
+      </div>
+
+      <div style="margin-top:8px; padding-top:6px; border-top:1px solid #eee; font-size:10px; color:#bbb;">
+        Time slider active · 24-hour congestion modelling · 7.5 km service area
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     HISTORY PANEL — draggable
+══════════════════════════════════════════════════════════════ -->
+<div id="panelHistory" class="draggable-panel">
+  <div class="panel-header">
+    <div class="drag-handle">⣿⣿</div>
+    <div style="flex:1; font-weight:bold;">📊 Dispatch Run Analytics</div>
+    <button class="panel-close" title="Close panel">✕</button>
+  </div>
+  <div class="panel-content">
+    <!-- Stat cards -->
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; margin-bottom:8px;">
+      <div style="text-align:center; background:#f8f9fb; padding:6px 3px; border-radius:7px; border:1px solid #eee;">
+        <div style="font-size:12px; color:#d62828;">🏆</div>
+        <div id="statWinRate" style="font-size:14px; font-weight:bold; color:#d62828;">—</div>
+        <div style="font-size:8px; color:#aaa; text-transform:uppercase;">Win Rate</div>
+      </div>
+      <div style="text-align:center; background:#f8f9fb; padding:6px 3px; border-radius:7px; border:1px solid #eee;">
+        <div style="font-size:12px; color:#2a7a4f;">⏱️</div>
+        <div id="statAvgSaved" style="font-size:14px; font-weight:bold; color:#2a7a4f;">—</div>
+        <div style="font-size:8px; color:#aaa; text-transform:uppercase;">Avg Saved</div>
+      </div>
+      <div style="text-align:center; background:#f8f9fb; padding:6px 3px; border-radius:7px; border:1px solid #eee;">
+        <div style="font-size:12px; color:#8e44ad;">⚡</div>
+        <div id="statBestSaved" style="font-size:14px; font-weight:bold; color:#8e44ad;">—</div>
+        <div style="font-size:8px; color:#aaa; text-transform:uppercase;">Best Save</div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div style="height:115px; margin-bottom:8px;">
+      <canvas id="historyChart"></canvas>
+    </div>
+
+    <!-- Run table -->
+    <table style="width:100%; border-collapse:collapse;" id="histTable">
+      <thead>
+        <tr style="background:#f8f8f8; font-size:10px; color:#777;">
+          <th style="padding:2px 5px; text-align:left; font-weight:normal;">Time</th>
+          <th style="padding:2px 5px; text-align:right; color:#d62828; font-weight:normal;">Dyn (min)</th>
+          <th style="padding:2px 5px; text-align:right; font-weight:normal;">Sta (min)</th>
+          <th style="padding:2px 5px; text-align:center; font-weight:normal;">Win</th>
+        </tr>
+      </thead>
+      <tbody id="histBody">
+        <tr>
+          <td colspan="4" style="padding:8px 5px; text-align:center; color:#bbb; font-size:11px; font-style:italic;">
+            Run a simulation to see history
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div id="histSummary" style="margin-top:7px; font-size:10px; color:#888;">No runs yet</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     LEGEND PANEL — draggable
+══════════════════════════════════════════════════════════════ -->
+<div id="panelLegend" class="draggable-panel">
+  <div class="panel-header">
+    <div class="drag-handle">⣿⣿</div>
+    <div style="flex:1; font-weight:bold;">🗺️ Legend</div>
+    <button class="panel-close" title="Close panel">✕</button>
+  </div>
+  <div class="panel-content">
+    <b>🗺️ Legend</b><br>
+    <b style="font-size:10px; color:#777; text-transform:uppercase;">Dynamic Routes (AI)</b><br>
+    <span style="color:#e82020; font-size:15px; font-weight:bold;">━━</span>&nbsp;<span style="color:#e82020; font-weight:bold;">Amb → Accident</span><br>
+    <span style="color:#8e44ad; font-size:15px; font-weight:bold;">━━</span>&nbsp;<span style="color:#8e44ad; font-weight:bold;">Accident → Hosp</span><br>
+
+    <b style="font-size:10px; color:#777; text-transform:uppercase;">Static Routes (Baseline)</b><br>
+    <span style="color:#1a6faf; font-size:14px;">╌╌</span>&nbsp;Nearest Hosp → Accident<br>
+    <span style="color:#1f7a6e; font-size:14px;">╌╌</span>&nbsp;Accident → Nearest Hosp<br>
+
+    <b style="font-size:10px; color:#777; text-transform:uppercase;">Congestion Heat</b><br>
+    <span style="color:#2dc653;">●</span>&nbsp;Clear &lt;0.25&nbsp;&nbsp;
+    <span style="color:#f6c90e;">●</span>&nbsp;Moderate &lt;0.50<br>
+    <span style="color:#f77f00;">●</span>&nbsp;Heavy &lt;0.75&nbsp;&nbsp;
+    <span style="color:#d62828;">●</span>&nbsp;Severe ≥0.75<br>
+
+    <b style="font-size:10px; color:#777; text-transform:uppercase;">Markers</b><br>
+    ⚠️ Accident &nbsp; 🚑 Dispatched<br>
+    <span style="background:crimson; color:white; padding:0 4px; border-radius:50%; font-weight:bold; font-size:10px;">+</span>&nbsp;Hospital &nbsp;
+    <span style="background:#8e44ad; color:white; padding:1px 5px; border-radius:3px; font-size:9px; font-weight:bold;">DYN</span>&nbsp;
+    <span style="background:#1f7a6e; color:white; padding:1px 5px; border-radius:3px; font-size:9px; font-weight:bold;">STA</span><br>
+
+    <b style="font-size:10px; color:#777; text-transform:uppercase;">Service Area</b><br>
+    <span style="color:#d62828;">- - -</span>&nbsp;7.5 km boundary<br>
+    <span style="font-size:9px; color:#bbb;">Clicks outside boundary are blocked</span>
+  </div>
+</div>
+
+<!-- ── Phase Toast ──────────────────────────── -->
+<div id="phaseToast" class="hidden"></div>
+
+<!-- Chart.js init -->
+<script>
+  let historyChart = null;
+
+  function initHistoryChart() {
+    const ctx = document.getElementById('historyChart').getContext('2d');
+    historyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Dynamic',
+            data: [],
+            borderColor: '#d62828',
+            backgroundColor: 'rgba(214,40,40,0.08)',
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 3,
+            fill: true,
+          },
+          {
+            label: 'Static',
+            data: [],
+            borderColor: '#1a6faf',
+            backgroundColor: 'rgba(26,111,175,0.06)',
+            borderWidth: 1.5,
+            borderDash: [5, 4],
+            tension: 0.35,
+            pointRadius: 3,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        plugins: {
+          legend: {
+            display: true, position: 'top',
+            labels: { boxWidth: 10, font: { size: 9 }, color: '#888' },
+          },
+          tooltip: { mode: 'index', intersect: false },
+        },
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: { font: { size: 9 }, color: '#aaa' },
+            grid:  { color: 'rgba(0,0,0,0.05)' },
+          },
+          x: {
+            ticks: { font: { size: 8 }, color: '#bbb', maxRotation: 0 },
+            grid:  { display: false },
+          },
+        },
+      },
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', initHistoryChart);
+</script>
+
+<script src="/static/js/main.js"></script>
+</body>
+</html>
