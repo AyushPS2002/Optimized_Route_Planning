@@ -4,3 +4,4 @@ geopandas
 networkx
 pandas
 scipy
+scikit-learn
