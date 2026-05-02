@@ -208,5 +208,9 @@ def validate():
 
 # ══════════════════════════════════════════════════════════════════════════════
 
+# Add this line specifically for Vercel to find the app object easily
+app = app 
+
 if __name__ == "__main__":
+    # This part runs when you run 'python app.py' on your computer
     app.run(debug=False, port=5000, threaded=True)
