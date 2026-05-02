@@ -4,4 +4,10 @@ geopandas
 networkx
 pandas
 scipy
+numpy
 scikit-learn
+matplotlib
+seaborn
+flask-cors
+gunicorn
+folium
